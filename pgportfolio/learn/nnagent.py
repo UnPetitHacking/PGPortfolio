@@ -27,13 +27,27 @@ class NNAgent:
         self.__commission_ratio = self.__config["trading"]["trading_consumption"]
         self.__pv_vector = tf.reduce_sum(self.__net.output * self.__future_price, reduction_indices=[1]) *\
                            (tf.concat([tf.ones(1), self.__pure_pc()], axis=0))
+        
         self.__log_mean_free = tf.reduce_mean(tf.log(tf.reduce_sum(self.__net.output * self.__future_price,
                                                                    reduction_indices=[1])))
         self.__portfolio_value = tf.reduce_prod(self.__pv_vector)
+        ############
         self.__mean = tf.reduce_mean(self.__pv_vector)
         self.__log_mean = tf.reduce_mean(tf.log(self.__pv_vector))
         self.__standard_deviation = tf.sqrt(tf.reduce_mean((self.__pv_vector - self.__mean) ** 2))
         self.__sharp_ratio = (self.__mean - 1) / self.__standard_deviation
+
+        ###########
+        self._pv_vector_2 = self.__net.output * self.__future_price
+        self.__mean_2 = tf.reduce_mean(self.__pv_vector)
+        self.__log_mean_2 = tf.reduce_mean(tf.log(self.__pv_vector))
+        self.__standard_deviation_2 = tf.sqrt(tf.reduce_mean((self.__pv_vector - self.__mean) ** 2))
+        #self.__sharp_ratio = (self.__mean - 1) / self.__standard_deviation
+        self.__net.output_2 = tf.norm(self.__net.output*self.standard_deviation)
+        self._pv_vector_3 = tf.reduce_sum(self.__net.output_2 * self.__future_price, reduction_indices=[1]) *\
+                           (tf.concat([tf.ones(1), self.__pure_pc()], axis=0))
+        self.__pv_vector = self._pv_vector_3
+        ############
         self.__loss = self.__set_loss_function()
         self.__train_operation = self.init_train(learning_rate=self.__config["training"]["learning_rate"],
                                                  decay_steps=self.__config["training"]["decay_steps"],
@@ -99,7 +113,7 @@ class NNAgent:
                    LAMBDA * tf.reduce_mean(tf.reduce_sum(-tf.log(1 + 1e-6 - self.__net.output), reduction_indices=[1]))
 
         def loss_function6():
-            return -tf.reduce_mean(tf.log(self.pv_vector))
+            return -tf.reduce_mean(tf.log(self.pv_vector*0.5))
 
         def loss_function7():
             return -tf.reduce_mean(tf.log(self.pv_vector)) + \
@@ -110,7 +124,11 @@ class NNAgent:
                                           -tf.reduce_sum(tf.abs(self.__net.output[:, 1:] - self.__net.previous_w)
                                                          *self.__commission_ratio, reduction_indices=[1])))
 
-        loss_function = loss_function5
+        def loss_function9():
+            return -tf.reduce_mean(tf.log(tf.reduce_sum(self.pv_vector + self.pv_vector/self.__standard_deviation)))
+
+        loss_function = loss_function6
+
         if self.__config["training"]["loss_function"] == "loss_function4":
             loss_function = loss_function4
         elif self.__config["training"]["loss_function"] == "loss_function5":
@@ -121,7 +139,9 @@ class NNAgent:
             loss_function = loss_function7
         elif self.__config["training"]["loss_function"] == "loss_function8":
             loss_function = with_last_w
-
+        elif self._config["training"]["loss_function"] == "loss_function9":
+            loss_function = with_last_w
+        
         loss_tensor = loss_function()
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
         if regularization_losses:
